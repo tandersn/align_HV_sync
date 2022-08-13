@@ -29,6 +29,8 @@ I chose the following approach, working with an unisgned 8 bit 40msps source fil
 
 12. skip forward a little less than a frame's worth of samples and start back at step 1.
 
+13. end.
+
 Video comparing head switch distortion:
 [![Watch the video](https://raw.githubusercontent.com/tandersn/GNRC-Flowgraphs/main/z_images/aligned_out_3.png)](https://www.youtube.com/watch?v=UTNsJvXHMl8)
 
