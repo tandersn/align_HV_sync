@@ -174,7 +174,7 @@ while (1) {
             }
             $hit    = 0;
             $tmpvar = "";
-            if ($linecount == 527 ) {
+            if ($linecount < 527 ) {
                $hit=1;
             }
             #print $linecount  . "\n";
@@ -189,7 +189,7 @@ while (1) {
                 }
             }
             if ($hit) {
-                print "bad line count or bad line data, skipped field $filecount\n";
+                print "bad line count $linecount or bad line data, skipped field $filecount\n";
                 $bin_file_pos += 500000;
                 $check_first_field = 0;
             } else {
