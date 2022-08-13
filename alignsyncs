@@ -162,7 +162,7 @@ while (1) {
             }
             $hit    = 0;
             $tmpvar = "";
-            print $linecount  . "\n";
+            #print $linecount  . "\n";
             ############################### loop backwards to store the backwards lines forward into the outfile
             for ( $i = scalar @frame_line ; $i-- > 1 ; ) {
                 if ( length( $frame_line[$i] ) >= 2542 ) {
