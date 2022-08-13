@@ -5,7 +5,8 @@ NOTE: this program should probalby be written in C/C++.  It is written in Perl b
 
 i have been working on a process to try and improve head switch distortions and needed the frame to be sync'd to check the improvements i was making.  So i wrote a script that does rough sync. Right now it is LUMA only, but if you have the color info in a parallel file, you'd just do the seek and write operations on both data files. It's also NTSC VHS only, but for 625 line VHS, you just need to play with the positional numbers a bit. 
 
-I chose the following approach, working with an unisgned 8 bit 40msps source file, that is already properly "clamped":
+I chose the following approach, working with an unisgned 8 bit 40msps source file, that is already properly "clamped". The input for this program, is the output of my GNRC flowgraph:
+https://github.com/tandersn/GNRC-Flowgraphs/blob/main/vhs_FM_dmod/vhs_FM_dmod_V3_AGC.grc
 
 1. use a 1000 sample moving average and check for when the average drops below 30 (35 may be better). This only happens at the BR pulses towards the beginning of each fields. 
 
