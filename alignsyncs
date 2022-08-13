@@ -1,0 +1,163 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+use Fcntl qw(SEEK_SET SEEK_CUR SEEK_END);
+
+#2542
+# around 54 frames
+
+our ( @avgdata, $infiledata, $infilecontrol, $outfile, $bin_file_pos, $data_cunk_1, $data_cunk_2, $hit, $i, $bin_file_posadj, $filecount, $linecount, @frame, @frame_line, $tmpvar, $ii );
+our ( $linepos, $start, $bff );
+
+$infiledata = "/tmp/vhs_fm_dmod_v3.u8";
+$outfile    = "/tmp/outbackwards.u8";
+
+
+$bin_file_pos = 1;
+$filecount = 1;
+$bff       = 0;
+
+open my $INDATA, '<', $infiledata or die;
+binmode $INDATA;
+
+open my $OUTDATAFULL, '>', $outfile or die;
+binmode $OUTDATAFULL;
+
+$tmpvar = `mkdir /tmp/picstemp 2>/dev/null`;
+$tmpvar = `rm /tmp/picstemp/* 2>/dev/null`;
+$tmpvar = `rm /tmp/out_* 2>/dev/null`;
+$tmpvar = `echo # > /tmp/ffmpegs`;
+
+$start = 0;
+print "\n";
+while (1) {
+    $data_cunk_1 = "";
+    seek $INDATA, $bin_file_pos, SEEK_SET;
+    my $success = read $INDATA, $data_cunk_1, 1000;
+    die $! if not defined $success;
+    last   if not $success;
+    $tmpvar  = 0;
+    @avgdata = split //, $data_cunk_1;
+    foreach $data_cunk_1 (@avgdata) {
+        $data_cunk_1  = unpack "C", $data_cunk_1;
+        $tmpvar = $tmpvar + $data_cunk_1;
+    }
+    $data_cunk_1 = $tmpvar / 1000;
+    if ( $data_cunk_1 < 30 ) {    #was 50
+        if ( $start == 0 ) {
+            $start = 1;
+            seek $INDATA, $bin_file_pos + 7250, SEEK_SET;
+            my $success2 = read $INDATA, $data_cunk_2, 10168;    # was 1337092 ;
+            die $! if not defined $success2;
+            last   if not $success2;
+            @avgdata = split //, $data_cunk_2;
+            $i       = 0;
+            $hit     = 0;
+
+            foreach $data_cunk_1 (@avgdata) {
+                $data_cunk_1 = unpack "C", $data_cunk_1;
+                if ( $data_cunk_1 > 30 ) {
+                    $i = $i + 1;
+                } else {
+                    $i = 0;
+                }
+                if ( $i > 2000 ) {
+                    print "bottom frame first, skipping\n";
+                    $bff = 1;
+                    last;
+                }
+            }
+        }
+        if ( $bff == 1 ) {
+            $bff = 0;
+            $bin_file_pos += 500000;
+        } else {
+            $bin_file_pos = $bin_file_pos - 7220;    # roughly start of frame if vsync detected
+            seek $INDATA, $bin_file_pos, SEEK_SET;
+            my $success2 = read $INDATA, $data_cunk_2, 1338592;    # was 1337092 ;
+            die $! if not defined $success2;
+            last   if not $success2;
+
+###############################This block of code outputs the raw frame and makes a png of it##
+###############################for troubleshooting and checking aligment and that kind of stuff
+#            open my $OUTDATA, '>', "/tmp/out_$filecount.u8" or die;
+#            binmode $OUTDATA;
+#            print $OUTDATA $data_cunk_2;
+#            close $OUTDATA;
+#            #        $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 /tmp/picstemp/out_$filecount.png`;
+#            $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 -vf "scale=1280x1052" /tmp/picstemp/out_$filecount.png`;
+###############################################################################################
+
+            $filecount = $filecount + 1;
+            @frame = split //, $data_cunk_2;
+            if ( scalar @frame < 1338592 ) {
+                print "too small chunk\n";
+                last;
+            }
+            $linecount = 1;
+            #for ( $i = 1337091 ; $i-- > 1 ; ) {  # LEFT EDGE SYNC
+            for ( $i = 1335091 ; $i-- > 1 ; ) {  # BOTH EDGE SYNC
+            #for ( $i = 1334692 ; $i-- > 1 ; ) { # attempted value for right edge sync
+                $data_cunk_1 = unpack "C", $frame[$i];
+                if ( $data_cunk_1 < 30 ) {
+                    while (1) {
+                        $i     = $i - 1;
+                        $data_cunk_1 = unpack "C", $frame[$i];
+                        if ( $data_cunk_1 > 30 ) {
+                            last;
+                        }
+                    }
+                    $frame_line[$linecount] = $frame[$i];
+                    for $ii ( 1 .. 2541 ) {
+                        $tmpvar = $frame[ $ii + $i ];
+                        if ( !length $tmpvar ) {
+                            print "empty line data Field: $filecount line:  $linecount\n";
+                            last;
+                        } else {
+                            $frame_line[$linecount] .= $tmpvar;
+                        }
+                    }
+                    $linecount = $linecount + 1;
+                    $i         = $i - 2100;
+                }
+            }
+            $hit    = 0;
+            $tmpvar = "";
+            print scalar @frame_line . "\n";
+            for ( $i = scalar @frame_line ; $i-- > 1 ; ) {
+                if ( length( $frame_line[$i] ) >= 2542 ) {
+                    $tmpvar .= $frame_line[$i];
+                } else {
+                    print "bad line length $i " . length( $frame_line[$i] ) . "\n";
+                    $hit = 1;
+                }
+            }
+            if ($hit) {
+                print "skipped field\n";
+                $bin_file_pos += 500000;
+                $start = 0 ;
+            } else {
+###############################This block of code outputs the raw frame and makes a png of it##
+###############################for troubleshooting and checking aligment and that kind of stuff
+            open my $OUTDATA, '>', "/tmp/out_$filecount.u8" or die;
+            binmode $OUTDATA;
+            print $OUTDATA $tmpvar;
+            close $OUTDATA;
+#            #        $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 /tmp/picstemp/out_$filecount.png`;
+            $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 -vf "scale=1280x1052" /tmp/picstemp/out_$filecount.png`;
+###############################################################################################
+
+                print $OUTDATAFULL $tmpvar;
+            }
+            @frame_line = "";
+            $bin_file_pos  = $bin_file_pos + 1338363 + 100;
+            print "Processed: $filecount Frames...\n";
+        }
+    }
+    $bin_file_pos = $bin_file_pos + 10;
+
+}
+
+close;
+
+#$tmpvar = `ls /tmp |grep ^out_ |xargs -I \$ bash -c 'ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/\$ -vf "scale=1280x1024" /tmp/picstemp/\$\%00d.png'`;
