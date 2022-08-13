@@ -20,8 +20,8 @@ use Fcntl qw(SEEK_SET SEEK_CUR SEEK_END);
 #~2542 samples per NTSC line at 40msps
 #
 
-our ( @avgdata, $infiledata, $infilecontrol, $outfile, $bin_file_pos, $data_cunk_1, $data_cunk_2, $hit, $i, $bin_file_posadj, $filecount, $linecount, @frame, @frame_line, $tmpvar, $ii );
-our ( $linepos, $check_first_field, $bff );
+our ( @avgdata, $infiledata, $infilecontrol, $outfile, $bin_file_pos, $data_chunk_1, $data_chunk_2, $hit, $i, $bin_file_posadj, $filecount, $linecount, @frame, @frame_line, $tmpvar, $ii );
+our ( $linepos, $check_first_field, $bff, $DEBUG );
 
 $infiledata = "/tmp/vhs_fm_dmod_v3.u8";
 $outfile    = "/tmp/outbackwards.u8";
@@ -29,6 +29,7 @@ $outfile    = "/tmp/outbackwards.u8";
 $bin_file_pos = 1;
 $filecount    = 1;
 $bff          = 0;
+$DEBUG        = $ARGV[0];
 
 open my $INDATA, '<', $infiledata or die;
 binmode $INDATA;
@@ -36,15 +37,16 @@ binmode $INDATA;
 open my $OUTDATAFULL, '>', $outfile or die;
 binmode $OUTDATAFULL;
 
-#############debugging stuff
-#$tmpvar = `mkdir /tmp/picstemp 2>/dev/null`;
-#$tmpvar = `rm /tmp/picstemp/* 2>/dev/null`;
-#$tmpvar = `rm /tmp/out_* 2>/dev/null`;
-#$tmpvar = `echo # > /tmp/ffmpegs`;
+if ($DEBUG) {
+    $bin_file_pos = 1;
+    $tmpvar       = `mkdir /tmp/picstemp 2>/dev/null`;
+    $tmpvar       = `rm /tmp/picstemp/* 2>/dev/null`;
+    $tmpvar       = `rm /tmp/out_* 2>/dev/null`;
+}
 
 $check_first_field = 0;
 while (1) {
-    $data_cunk_1 = "";
+    $data_chunk_1 = "";
     #################################################################################
     ##############  read in 1000 samples, and average them, and see if below 30
     ##############  (30 is pretty tight, used 50 initially in testing)
@@ -53,24 +55,24 @@ while (1) {
     ##############  if not, seek ahead a bit and repeat. This takes a while at beginning
     ##################################################################################
     seek $INDATA, $bin_file_pos, SEEK_SET;
-    my $success = read $INDATA, $data_cunk_1, 1000;
+    my $success = read $INDATA, $data_chunk_1, 1000;
     die $! if not defined $success;
     last   if not $success;
     $tmpvar  = 0;
-    @avgdata = split //, $data_cunk_1;
-    foreach $data_cunk_1 (@avgdata) {
-        $data_cunk_1 = unpack "C", $data_cunk_1;
-        $tmpvar      = $tmpvar + $data_cunk_1;
+    @avgdata = split //, $data_chunk_1;
+    foreach $data_chunk_1 (@avgdata) {
+        $data_chunk_1 = unpack "C", $data_chunk_1;
+        $tmpvar       = $tmpvar + $data_chunk_1;
     }
-    $data_cunk_1 = $tmpvar / 1000;
-    if ( $data_cunk_1 < 30 ) {
+    $data_chunk_1 = $tmpvar / 1000;
+    if ( $data_chunk_1 < 30 ) {
         ##################################################################################
         ############# found BR pulses, if this is the first pulse found when starting the
         ############# file, or the first pulse found after a skipped/dropped field, then
         ############# need to check if bottom or top field. Basically we are going to
         ############# move the file pointer ahead ~3.5 lines, then check the number
         ############# of the pulses. If a long pulse is found in the next ~5 lines then
-        ############# this indicates it is the bottom field 
+        ############# this indicates it is the bottom field
         ##################################################################################
         ############# it was a judgement call on my part to drop both fields if even only
         ############# one is bad, so that frame/field mismatch doesn't occur, who knows
@@ -79,16 +81,16 @@ while (1) {
         if ( $check_first_field == 0 ) {
             $check_first_field = 1;
             seek $INDATA, $bin_file_pos + 7250, SEEK_SET;
-            my $success2 = read $INDATA, $data_cunk_2, 10168;    
+            my $success2 = read $INDATA, $data_chunk_2, 10168;
             die $! if not defined $success2;
             last   if not $success2;
-            @avgdata = split //, $data_cunk_2;
+            @avgdata = split //, $data_chunk_2;
             $i       = 0;
             $hit     = 0;
 
-            foreach $data_cunk_1 (@avgdata) {
-                $data_cunk_1 = unpack "C", $data_cunk_1;
-                if ( $data_cunk_1 > 30 ) {
+            foreach $data_chunk_1 (@avgdata) {
+                $data_chunk_1 = unpack "C", $data_chunk_1;
+                if ( $data_chunk_1 > 30 ) {
                     $i = $i + 1;
                 } else {
                     $i = 0;
@@ -110,22 +112,23 @@ while (1) {
             ############## found a top field, read in a bit more than a frame's worth of data
             $bin_file_pos = $bin_file_pos - 7220;    # roughly start of frame if vsync detected
             seek $INDATA, $bin_file_pos, SEEK_SET;
-            my $success2 = read $INDATA, $data_cunk_2, 1338592;
+            my $success2 = read $INDATA, $data_chunk_2, 1338592;
             die $! if not defined $success2;
             last   if not $success2;
 
 ###############################This block of code outputs the raw frame and makes a png of it##
 ###############################for troubleshooting and checking aligment and that kind of stuff
-            #            open my $OUTDATA, '>', "/tmp/out_$filecount.u8" or die;
-            #            binmode $OUTDATA;
-            #            print $OUTDATA $data_cunk_2;
-            #            close $OUTDATA;
-            #            #        $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 /tmp/picstemp/out_$filecount.png`;
-            #            $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 -vf "scale=1280x1052" /tmp/picstemp/out_$filecount.png`;
+            if ($DEBUG) {
+                open my $OUTDATA, '>', "/tmp/out_$filecount.u8" or die;
+                binmode $OUTDATA;
+                print $OUTDATA $data_chunk_2;
+                close $OUTDATA;
+                $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 -vf "scale=1280x1052" /tmp/picstemp/out_$filecount.png`;
+            }
 ###############################################################################################
 
             $filecount = $filecount + 1;
-            @frame     = split //, $data_cunk_2;
+            @frame     = split //, $data_chunk_2;
             if ( scalar @frame < 1338592 ) {
                 print "too small chunk\n";
                 last;
@@ -133,13 +136,13 @@ while (1) {
             $linecount = 1;
             for ( $i = 1337091 ; $i-- > 1 ; ) {
                 ##### move backwards through the frame starting about way enough in to not catch the BR Pulses
-                $data_cunk_1 = unpack "C", $frame[$i];
-                if ( $data_cunk_1 < 30 ) {
+                $data_chunk_1 = unpack "C", $frame[$i];
+                if ( $data_chunk_1 < 30 ) {
                     #### found the right edge of the HSYNC PULSE, move backwards to find the start
                     while (1) {
-                        $i           = $i - 1;
-                        $data_cunk_1 = unpack "C", $frame[$i];
-                        if ( $data_cunk_1 > 30 ) {
+                        $i            = $i - 1;
+                        $data_chunk_1 = unpack "C", $frame[$i];
+                        if ( $data_chunk_1 > 30 ) {
                             ##############  found the start of the HSYNC PULSE
                             last;
                         }
@@ -162,6 +165,7 @@ while (1) {
             }
             $hit    = 0;
             $tmpvar = "";
+
             #print $linecount  . "\n";
             ############################### loop backwards to store the backwards lines forward into the outfile
             for ( $i = scalar @frame_line ; $i-- > 1 ; ) {
@@ -180,12 +184,13 @@ while (1) {
 ##############################################################################################
                 ###############################This block of code outputs the raw frame and makes a png of it##
                 ###############################for troubleshooting and checking aligment and that kind of stuff
-                #open my $OUTDATA, '>', "/tmp/out_$filecount.u8" or die;
-                #binmode $OUTDATA;
-                #print $OUTDATA $tmpvar;
-                #close $OUTDATA;
-                #        $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 /tmp/picstemp/out_$filecount.png`;
-                #$tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 -vf "scale=1280x1052" /tmp/picstemp/out_$filecount.png`;
+                if ($DEBUG) {
+                    open my $OUTDATA, '>', "/tmp/aligned_out_$filecount.u8" or die;
+                    binmode $OUTDATA;
+                    print $OUTDATA $tmpvar;
+                    close $OUTDATA;
+                    $tmpvar = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/aligned_out_$filecount.u8 -vf "scale=1280x1052" /tmp/picstemp/aligned_out_$filecount.png`;
+                }
 ###############################################################################################
 
                 print $OUTDATAFULL $tmpvar;
