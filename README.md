@@ -1,5 +1,7 @@
 # align_HV_sync
-Simple script to read in a 40msps CVBS flie and line up syncs
+Simple script to read in a 40msps CVBS flie and line up syncs.
+
+NOTE: this program should probalby be written in C/C++.  It is written in Perl because that is what i am most fluent in, and needed to get the task done quickly. Sorry ;).
 
 i have been working on a process to try and improve head switch distortions and needed the frame to be sync'd to check the improvements i was making.  So i wrote a script that does rough sync. Right now it is LUMA only, but if you have the color info in a parallel file, you'd just do the seek and write operations on both data files. It's also NTSC VHS only, but for 625 line VHS, you just need to play with the positional numbers a bit. 
 
@@ -27,6 +29,8 @@ I chose the following approach, working with an unisgned 8 bit 40msps source fil
 
 12. skip forward a little less than a frame's worth of samples and start back at step 1.
 
+Video comparing head switch distortion:
+[![Watch the video](https://raw.githubusercontent.com/tandersn/GNRC-Flowgraphs/main/z_images/aligned_out_3.png)](https://www.youtube.com/watch?v=UTNsJvXHMl8)
 
 Example of a clean tape aligment:
 ![pic1](https://raw.githubusercontent.com/tandersn/GNRC-Flowgraphs/main/z_images/aligned_out_3.png)
