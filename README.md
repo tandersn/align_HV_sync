@@ -28,5 +28,14 @@ I chose the following approach, working with an unisgned 8 bit 40msps source fil
 12. skip forward a little less than a frame's worth of samples and start back at step 1.
 
 
-This approach seems to be immune to macrovision. 
+Example of a clean tape aligment:
+![pic1](https://raw.githubusercontent.com/tandersn/GNRC-Flowgraphs/main/z_images/aligned_out_3.png)
+
+Example of very poor tape aligment:
+![pic1](https://raw.githubusercontent.com/tandersn/GNRC-Flowgraphs/main/z_images/aligned_out_20.png)
+
+This approach seems to be immune to macrovision. Example of macrovision tape aligment:
+![pic1](https://raw.githubusercontent.com/tandersn/GNRC-Flowgraphs/main/z_images/aligned_out_69.png)
+
+
 
