@@ -50,7 +50,7 @@ while (1) {
     ##############  (30 is pretty tight, used 50 initially in testing)
     ##############  this only occurs in the 2 BR pulses on lines 4,5,6 & 266,267,268,269
     ##############  note this requires the input file to be properly "clamped"
-    ##############  if not, seek ahead a bit and repeat. This part takes a bit in the
+    ##############  if not, seek ahead a bit and repeat. This takes a while at beginning
     ##################################################################################
     seek $INDATA, $bin_file_pos, SEEK_SET;
     my $success = read $INDATA, $data_cunk_1, 1000;
@@ -70,7 +70,7 @@ while (1) {
         ############# need to check if bottom or top field. Basically we are going to
         ############# move the file pointer ahead ~3.5 lines, then check the number
         ############# of the pulses. If a long pulse is found in the next ~5 lines then
-        ############# this indicates it is the bottom field ****this seems to be undocumented
+        ############# this indicates it is the bottom field 
         ##################################################################################
         ############# it was a judgement call on my part to drop both fields if even only
         ############# one is bad, so that frame/field mismatch doesn't occur, who knows
