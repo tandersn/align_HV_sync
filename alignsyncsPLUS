@@ -1,0 +1,332 @@
+#!/usr/bin/perl
+#
+#  Copyright (C) 2020-2022 Tony Anderson  <tandersn@cs.washington.edu>
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+
+use strict;
+use warnings;
+use Fcntl qw(SEEK_SET SEEK_CUR SEEK_END);
+
+#~2542 samples per NTSC line at 40msps
+#
+
+our ( @avgdata, $infiledata, $infilecontrol, $outfile, $bin_file_pos, $data_chunk_1, $data_chunk_2, $hit, $i, $rubbish_bin, $filecount, $linecount, @frame, @frame_lines, $tmpvar, $ii );
+our ( $linepos, $check_first_field, $bff, $DEBUG, $last_sync_detect, @long_lines, @hsync_right_edge, $ffmpeg, $proper_field, @hsync_samples, $hsync_1 );
+
+$infiledata = "/tmp/vhs_fm_dmod_v3.u8";
+$outfile    = "/tmp/outbackwards.u8";
+
+$bin_file_pos = 1;
+$filecount    = 1;
+$bff          = 0;
+$hsync_1      = ( pack 'c', 1 );
+$DEBUG        = $ARGV[0];
+
+if ($DEBUG) {
+
+    #    $infiledata   = "/tmp/test.u8";
+    $bin_file_pos = 1;
+    $tmpvar       = `mkdir /tmp/picstemp 2>/dev/null`;
+    $tmpvar       = `perltidy -b -ce -l=10000 alignsyncs`;
+    $tmpvar       = `rm -r /tmp/picstemp/* 2>/dev/null`;
+    $tmpvar       = `rm /tmp/out_* 2>/dev/null`;
+    print "DEBUG MODE ON \n";
+}
+
+open my $INDATA, '<', $infiledata or die;
+binmode $INDATA;
+
+open my $OUTDATAFULL, '>', $outfile or die;
+binmode $OUTDATAFULL;
+
+$check_first_field = 0;
+while (1) {
+    $data_chunk_1 = "";
+    #################################################################################
+    ##############  read in 1000 samples, and average them, and see if below 30
+    ##############  (30 is pretty tight, used 50 initially in testing)
+    ##############  this only occurs in the 2 BR pulses on lines 4,5,6 & 266,267,268,269
+    ##############  note this requires the input file to be properly "clamped"
+    ##############  if not, seek ahead a bit and repeat. This takes a while at beginning
+    ##################################################################################
+    seek $INDATA, $bin_file_pos, SEEK_SET;
+    my $success = read $INDATA, $data_chunk_1, 1000;
+    die $! if not defined $success;
+    last   if not $success;
+    $tmpvar  = 0;
+    @avgdata = split //, $data_chunk_1;
+    foreach $data_chunk_1 (@avgdata) {
+        $data_chunk_1 = unpack "C", $data_chunk_1;
+        $tmpvar       = $tmpvar + $data_chunk_1;
+    }
+    $data_chunk_1 = $tmpvar / 1000;
+    if ( $data_chunk_1 < 30 ) {    # was 30
+        ##################################################################################
+        ############# found BR pulses, if this is the first pulse found when starting the
+        ############# file, or the first pulse found after a skipped/dropped field, then
+        ############# need to check if bottom or top field. Basically we are going to
+        ############# move the file pointer ahead ~3.5 lines, then check the number
+        ############# of the pulses. If a long pulse is found in the next ~5 lines then
+        ############# this indicates it is the bottom field
+        ##################################################################################
+        ############# it was a judgement call on my part to drop both fields if even only
+        ############# one is bad, so that frame/field mismatch doesn't occur, who knows
+        ############# if this is the right thing to do?????
+        #################################################################################
+        if ( $check_first_field == 0 ) {
+            $check_first_field = 1;
+            seek $INDATA, $bin_file_pos + 7250, SEEK_SET;
+            my $success2 = read $INDATA, $data_chunk_2, 10168;
+            die $! if not defined $success2;
+            last   if not $success2;
+            @avgdata = split //, $data_chunk_2;
+            $i       = 0;
+            $hit     = 0;
+
+            foreach $data_chunk_1 (@avgdata) {
+                $data_chunk_1 = unpack "C", $data_chunk_1;
+                if ( $data_chunk_1 > 30 ) {
+                    $i = $i + 1;
+                } else {
+                    $i = 0;
+                }
+                if ( $i > 2000 ) {
+                    ### found a line longer than 2000, not EQ PULSE, indicates bottom field
+                    print "bottom frame first, skipping\n";
+                    $bff = 1;
+                    last;
+                }
+            }
+        }
+        if ( $bff == 1 ) {
+            ############## found a bottom field when wanting a top, reset trigger and advance
+            ############## a little less than a field's worth of samples
+            $bff = 0;
+            $bin_file_pos += 500000;
+        } else {
+            ############## found a top field, read in a bit more than a frame's worth of data
+            $bin_file_pos = $bin_file_pos - 7220;    # roughly start of frame if vsync detected
+            seek $INDATA, $bin_file_pos, SEEK_SET;
+            my $success2 = read $INDATA, $data_chunk_2, 1339692;    # was 1338592
+            die $! if not defined $success2;
+            last   if not $success2;
+
+###############################This block of code outputs the raw frame and makes a png of it##
+###############################for troubleshooting and checking aligment and that kind of stuff
+            if ($DEBUG) {
+                open my $OUTDATA, '>', "/tmp/out_$filecount.u8" or die;
+                binmode $OUTDATA;
+                print $OUTDATA $data_chunk_2;
+                close $OUTDATA;
+
+                #$ffmpeg = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 /tmp/picstemp/out2542_$filecount\_%00d.png 2>/dev/null`;
+                $ffmpeg = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_$filecount.u8 -vf "scale=1271x1052" /tmp/picstemp/out_$filecount\_%00d.png 2>/dev/null`;
+            }
+###############################################################################################
+
+            @frame = split //, $data_chunk_2;
+            if ( scalar @frame < 1339692 ) {
+                print "too small chunk\n";
+                last;
+            }
+            $linecount        = 1;
+            @long_lines       = ();
+            @hsync_right_edge = ();
+            @hsync_samples    = ();
+
+            #$last_sync_detect = 1337091;
+            ################## $linecount starts at 1 and goes up in this block
+            ##### move backwards through the frame starting about way enough in to not catch the BR Pulses
+            for ( $i = 1337091 ; $i-- > 1 ; ) {
+                $data_chunk_1 = unpack "C", $frame[$i];
+                if ( $data_chunk_1 < 30 ) {
+                    #### found the right edge of the HSYNC PULSE, move backwards to find the start
+                    $hsync_right_edge[$linecount] = $i;
+                    while (1) {
+                        $i            = $i - 1;
+                        $data_chunk_1 = unpack "C", $frame[$i];
+                        if ( $data_chunk_1 > 30 ) {
+                            ##############  found the start of the HSYNC PULSE
+                            #$hsync_samples[$linecount] = $i - $hsync_right_edge[$linecount] ;
+                            last;
+                        }
+                    }
+                    $i = $i + 2;    ################  Move forward some samples back into the HSYNC
+                    ########################## below, just shove 2542 samples (a lines worth @40msps) into frame line array
+                    $frame_lines[$linecount] = $frame[$i];
+                    for $ii ( 1 .. 2541 ) {
+                        $tmpvar = $frame[ $ii + $i ];
+                        if ( !length $tmpvar ) {
+                            print "empty line data Field: $filecount line:  $linecount\n";
+                            last;
+                        } else {
+                            $frame_lines[$linecount] .= $tmpvar;
+                        }
+                    }
+
+                    #$long_lines[$linecount] = $last_sync_detect - $i;
+                    #$last_sync_detect       = $i;
+                    $linecount = $linecount + 1;
+                    $i         = $i - 2100;        #### move backwards 4/5ths of a line to start looking for the next HSYNC
+
+                }
+            }
+            $hit          = 0;
+            $proper_field = "";
+            print "$linecount\n";
+            ############################### loop backwards to store the backwards lines forwards into the outfile ;)
+            ############### $linecount starts at however many lines there are, and counts down in this block
+            for ( $linecount = scalar @frame_lines ; $linecount-- > 1 ; ) {
+            ######### below alternate code for ride side sync re-aligment for active video or HS only don't need
+            ######### both, just one or the other if (1) = enabled ,  if (!1) = disabled, can disable both too
+
+
+                #check all active video lines
+                if (1) {
+                    if ( $linecount < 241 && $linecount > 1 ) {
+                        check_rh_sync();
+                    }
+                    if ( $linecount < 495 && $linecount > 264 ) {
+                        check_rh_sync();
+                    }
+                }
+
+                #check only HS lines
+                if ( !1 ) {  
+                    if ( $linecount < 7 && $linecount > 1 ) {
+                        check_rh_sync();
+                    }
+                    if ( $linecount < 270 && $linecount > 264 ) {
+                        check_rh_sync();
+                    }
+                }
+
+                if ( length( $frame_lines[$linecount] ) == 2542 ) {
+                    $proper_field .= $frame_lines[$linecount];
+                } else {
+                    print "bad line length $linecount " . length( $frame_lines[$linecount] ) . "\n";
+                    $hit = 1;
+                }
+            }
+            if ($hit) {
+                print "skipped field\n";
+                $bin_file_pos += 500000;
+                $check_first_field = 0;
+            } else {
+##############################################################################################
+                ###############################This block of code outputs the raw frame and makes a png of it##
+                ###############################for troubleshooting and checking aligment and that kind of stuff
+                if ($DEBUG) {
+                    open my $OUTDATA, '>', "/tmp/out_aligned_$filecount.u8" or die;
+                    binmode $OUTDATA;
+                    print $OUTDATA $proper_field;
+                    close $OUTDATA;
+
+                    #$ffmpeg = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_aligned_$filecount.u8 -vf "scale=2542x2104" /tmp/picstemp/temp/out2542_$filecount\_%00d.png 2>/dev/null`;
+                    $ffmpeg = `ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/out_aligned_$filecount.u8 -vf "scale=1271x1052" /tmp/picstemp/out_aligned_$filecount\_%00d.png 2>/dev/null`;
+                }
+###############################################################################################
+
+                print $OUTDATAFULL $proper_field;
+            }
+            @frame_lines = "";
+
+            #$bin_file_pos = $bin_file_pos + 1338363 + 100;    ########### move foreward about a frame
+            $bin_file_pos = $bin_file_pos + 1333363 + 100;    ########### move foreward a little less than a frame
+            print "Processed: $filecount Frames...\n";
+            $filecount = $filecount + 1;
+
+            #            exit 0;
+        }
+    }
+    $bin_file_pos = $bin_file_pos + 10;
+}
+
+close;
+
+exit 0;
+
+#$tmpvar = `ls /tmp |grep ^out_ |xargs -I \$ bash -c 'ffmpeg -f rawvideo -pix_fmt gray8 -video_size 2542x526 -i /tmp/\$ -vf "scale=1280x1024" /tmp/picstemp/\$\%00d.png'`;
+
+sub dup_line {
+    ###################################################################################
+    #this is crude way to fix distored lines, just replace it with the one from above
+    ###################################################################################
+    $frame_lines[$linecount] = $frame_lines[ ( $linecount + 1 ) ];
+
+    #        $rubbish_bin = ( pack "c", 250 ) x 2542;
+    #        $frame_lines[$linecount] = $rubbish_bin;
+    #    print "fixed line $linecount of frame $filecount by duplicting line.\n";
+
+    return 0;
+}
+
+sub check_rh_sync {
+    ###################################################################
+    ############## use the stored right hsync value to recreate the line
+    ############## note code only works for active video, not sure i care
+    ############## if non active video lines are perfectly aligned ???
+    ###################################################################
+
+    $frame_lines[$linecount] = $hsync_1 x 185;    #  create an artificial hsync pulse with 185 1s
+    for $ii ( 1 .. 2349 ) {
+        $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $ii ) ];
+    }
+    $linepos = ();
+    for $ii ( 1 .. 8 ) {
+        $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $ii + 2349 ) ];
+
+        $data_chunk_1 = unpack "C", $frame[ ( $hsync_right_edge[$linecount] + $ii + 2349 ) ];
+        if ( $data_chunk_1 < 40 ) {
+            $linepos = $ii;
+        }
+    }
+    if ( !$linepos ) {
+        fix_hs_line();
+    }
+
+    return 0;
+}
+
+sub fix_hs_line {
+
+    ###############################################################################################
+    ################### need to come up with a way to realign HS lines... until now, just replace
+    ################### with line above
+    dup_line();
+    return 0;
+
+    $linepos = 0;
+    $frame_lines[$linecount] = $hsync_1 x 185;    #  create an artificial hsync pulse with 185 1s
+    while (1) {
+        $data_chunk_1 = unpack "C", $frame[ ( $hsync_right_edge[$linecount] + $linepos ) ];
+        if ( $data_chunk_1 < 50 ) {
+            $linepos += 1;
+        } else {
+            $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $linepos ) ];
+            $linepos += 1;
+        }
+        if ( length $frame_lines[$linecount] == 2534 ) {
+            last;
+        }
+    }
+    for $ii ( 1 .. 8 ) {
+        $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $linepos + $ii ) ];
+        #
+        #        #        $data_chunk_1 = unpack "C", $frame[ ( $hsync_right_edge[$linecount] + $ii + $linepos ) ];
+        #        #        if ( $data_chunk_1 < 40 ) {
+        #        ################### could replace line
+        #        #        }
+    }
+    return 0;
+}
