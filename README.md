@@ -1,5 +1,5 @@
 # align_HV_sync
-Simple script to read in a 40msps CVBS flie and line up syncs.
+Script to read in a 40msps CVBS flie and line up syncs.
 
 NOTE: this program should probalby be written in C/C++.  It is written in Perl because that is what i am most fluent in, and needed to get the task done quickly. Sorry ;).
 
