@@ -37,7 +37,7 @@ if ($DEBUG) {
     #    $infiledata   = "/tmp/test.u8";
     $bin_file_pos = 1;
     $tmpvar       = `mkdir /tmp/picstemp 2>/dev/null`;
-    $tmpvar       = `perltidy -b -ce -l=10000 alignsyncs`;
+    $tmpvar       = `perltidy -b -ce -l=10000 alignsyncsPLUS`;
     $tmpvar       = `rm -r /tmp/picstemp/* 2>/dev/null`;
     $tmpvar       = `rm /tmp/out_* 2>/dev/null`;
     print "DEBUG MODE ON \n";
@@ -70,7 +70,7 @@ while (1) {
         $tmpvar       = $tmpvar + $data_chunk_1;
     }
     $data_chunk_1 = $tmpvar / 1000;
-    if ( $data_chunk_1 < 30 ) {    # was 30
+    if ( $data_chunk_1 < 30 ) {
         ##################################################################################
         ############# found BR pulses, if this is the first pulse found when starting the
         ############# file, or the first pulse found after a skipped/dropped field, then
@@ -95,7 +95,7 @@ while (1) {
 
             foreach $data_chunk_1 (@avgdata) {
                 $data_chunk_1 = unpack "C", $data_chunk_1;
-                if ( $data_chunk_1 > 30 ) {
+                if ( $data_chunk_1 > 50 ) {    #was 30
                     $i = $i + 1;
                 } else {
                     $i = 0;
@@ -149,7 +149,7 @@ while (1) {
             ##### move backwards through the frame starting about way enough in to not catch the BR Pulses
             for ( $i = 1337091 ; $i-- > 1 ; ) {
                 $data_chunk_1 = unpack "C", $frame[$i];
-                if ( $data_chunk_1 < 30 ) {
+                if ( $data_chunk_1 < 10 ) {    #was 30
                     #### found the right edge of the HSYNC PULSE, move backwards to find the start
                     $hsync_right_edge[$linecount] = $i;
                     while (1) {
@@ -157,11 +157,16 @@ while (1) {
                         $data_chunk_1 = unpack "C", $frame[$i];
                         if ( $data_chunk_1 > 30 ) {
                             ##############  found the start of the HSYNC PULSE
-                            #$hsync_samples[$linecount] = $i - $hsync_right_edge[$linecount] ;
+                            #$hsync_samples[$linecount] = $i - $hsync_right_edge[$linecount];
                             last;
                         }
                     }
-                    $i = $i + 2;    ################  Move forward some samples back into the HSYNC
+
+                    #print "$hsync_samples[$linecount]\n";
+                    $i = $i + 2;
+                    ################  Move forward some samples back into the HSYNC  #was 2, 20 worked with LD, interralted to detection value
+                    ################  in check_rh_sync
+                    ##########################################################################
                     ########################## below, just shove 2542 samples (a lines worth @40msps) into frame line array
                     $frame_lines[$linecount] = $frame[$i];
                     for $ii ( 1 .. 2541 ) {
@@ -183,30 +188,30 @@ while (1) {
             }
             $hit          = 0;
             $proper_field = "";
-            print "$linecount\n";
+            if ($DEBUG) {
+                print "$linecount\n";
+            }
             ############################### loop backwards to store the backwards lines forwards into the outfile ;)
             ############### $linecount starts at however many lines there are, and counts down in this block
             for ( $linecount = scalar @frame_lines ; $linecount-- > 1 ; ) {
-            ######### below alternate code for ride side sync re-aligment for active video or HS only don't need
-            ######### both, just one or the other if (1) = enabled ,  if (!1) = disabled, can disable both too
-
 
                 #check all active video lines
                 if (1) {
-                    if ( $linecount < 241 && $linecount > 1 ) {
+                    if ( $linecount < 244 && $linecount > 1 ) {
                         check_rh_sync();
                     }
-                    if ( $linecount < 495 && $linecount > 264 ) {
+                    if ( $linecount < 506 && $linecount > 263 ) {
                         check_rh_sync();
                     }
                 }
 
                 #check only HS lines
-                if ( !1 ) {  
+                if ( !1 ) {
+                    print "**********************************************************is this working\n";
                     if ( $linecount < 7 && $linecount > 1 ) {
                         check_rh_sync();
                     }
-                    if ( $linecount < 270 && $linecount > 264 ) {
+                    if ( $linecount < 270 && $linecount > 263 ) {
                         check_rh_sync();
                     }
                 }
@@ -245,8 +250,10 @@ while (1) {
             $bin_file_pos = $bin_file_pos + 1333363 + 100;    ########### move foreward a little less than a frame
             print "Processed: $filecount Frames...\n";
             $filecount = $filecount + 1;
+            if ($DEBUG) {
 
-            #            exit 0;
+                # exit 0;
+            }
         }
     }
     $bin_file_pos = $bin_file_pos + 10;
@@ -278,20 +285,22 @@ sub check_rh_sync {
     ############## if non active video lines are perfectly aligned ???
     ###################################################################
 
-    $frame_lines[$linecount] = $hsync_1 x 185;    #  create an artificial hsync pulse with 185 1s
-    for $ii ( 1 .. 2349 ) {
+    $frame_lines[$linecount] = $hsync_1 x 182;    #  create an artificial hsync pulse with 185 1s
+    for $ii ( 1 .. 2352 ) {
         $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $ii ) ];
     }
     $linepos = ();
     for $ii ( 1 .. 8 ) {
-        $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $ii + 2349 ) ];
+        $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $ii + 2352 ) ];
 
-        $data_chunk_1 = unpack "C", $frame[ ( $hsync_right_edge[$linecount] + $ii + 2349 ) ];
-        if ( $data_chunk_1 < 40 ) {
+        $data_chunk_1 = unpack "C", $frame[ ( $hsync_right_edge[$linecount] + $ii + 2352 ) ];
+        if ( $data_chunk_1 < 55 ) {
             $linepos = $ii;
         }
     }
     if ( !$linepos ) {
+        print "frame: $filecount line: $linecount copied from line above.\n";
+
         fix_hs_line();
     }
 
@@ -305,9 +314,10 @@ sub fix_hs_line {
     ################### with line above
     dup_line();
     return 0;
-
+    ############################### BELOW HERE NOT EXECUTED < EXPERIMENTAL
+    ############################### FIX up values before using
     $linepos = 0;
-    $frame_lines[$linecount] = $hsync_1 x 185;    #  create an artificial hsync pulse with 185 1s
+    $frame_lines[$linecount] = $hsync_1 x 183;    #  create an artificial hsync pulse with 185 1s (was 185)
     while (1) {
         $data_chunk_1 = unpack "C", $frame[ ( $hsync_right_edge[$linecount] + $linepos ) ];
         if ( $data_chunk_1 < 50 ) {
@@ -316,7 +326,7 @@ sub fix_hs_line {
             $frame_lines[$linecount] .= $frame[ ( $hsync_right_edge[$linecount] + $linepos ) ];
             $linepos += 1;
         }
-        if ( length $frame_lines[$linecount] == 2534 ) {
+        if ( length $frame_lines[$linecount] == 2534 ) {    # <<< is this still right?
             last;
         }
     }
