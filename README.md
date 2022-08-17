@@ -3,9 +3,9 @@ Script to read in a 40msps CVBS flie and line up syncs.
 
 NOTE: this program should probalby be written in C/C++.  It is written in Perl because that is what i am most fluent in, and needed to get the task done quickly. Sorry ;).
 
--alignsyncs =  aligns H and V syncs only, and only based on the left edge of the HSYNC pulse
--alignsyncsPLUS = aligns H and V syncs, and optionally (flags in code), analyzes and aligns the lines better, and possibly replaces really bad ones
--alignsyncsPLUSmt = same as above except multithreaded AND doesn't drop bad frames, this could cause a bad frame or blank frame to be written to the ouput file
+-  alignsyncs =  aligns H and V syncs only, and only based on the left edge of the HSYNC pulse
+-  alignsyncsPLUS = aligns H and V syncs, and optionally (flags in code), analyzes and aligns the lines better, and possibly replaces really bad ones
+-  alignsyncsPLUSmt = same as above except multithreaded AND doesn't drop bad frames, this could cause a bad frame or blank frame to be written to the ouput file
 
 
 
