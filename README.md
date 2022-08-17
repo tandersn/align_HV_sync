@@ -1,7 +1,15 @@
-# align_HV_sync
+# align_HV_sync / 
 Script to read in a 40msps CVBS flie and line up syncs.
 
 NOTE: this program should probalby be written in C/C++.  It is written in Perl because that is what i am most fluent in, and needed to get the task done quickly. Sorry ;).
+
+#alignsyncs =  aligns H and V syncs only, and only based on the left edge of the HSYNC pulse
+
+#alignsyncsPLUS = aligns H and V syncs, and optionally (flags in code), analyzes and aligns the lines better, and possibly replaces really bad ones
+
+#alignsyncsPLUSmt = same as above except multithreaded AND doesn't drop bad frames, this could cause a bad frame or blank frame to be written to the ouput file
+
+
 
 i have been working on a process to try and improve head switch distortions and needed the frame to be sync'd to check the improvements i was making.  So i wrote a script that does rough sync. Right now it is LUMA only, but if you have the color info in a parallel file, you'd just do the seek and write operations on both data files. It's also NTSC VHS only, but for 625 line VHS, you just need to play with the positional numbers a bit. 
 
